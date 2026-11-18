@@ -3,6 +3,43 @@ document.addEventListener("DOMContentLoaded", () => {
   const activitySelect = document.getElementById("activity");
   const signupForm = document.getElementById("signup-form");
   const messageDiv = document.getElementById("message");
+  const signupContainer = document.getElementById("signup-container");
+  const accountButton = document.getElementById("account-button");
+  const accountDropdown = document.getElementById("account-dropdown");
+  const accountLabel = document.getElementById("account-label");
+  const accountStatus = document.getElementById("account-status");
+  const loginButton = document.getElementById("login-button");
+  const logoutButton = document.getElementById("logout-button");
+  const loginDialog = document.getElementById("login-dialog");
+  const loginForm = document.getElementById("login-form");
+  const loginMessage = document.getElementById("login-message");
+  const cancelLoginButton = document.getElementById("cancel-login-button");
+  let teacherCredentials = sessionStorage.getItem("teacherCredentials");
+
+  function authHeaders() {
+    return teacherCredentials
+      ? { Authorization: `Basic ${teacherCredentials}` }
+      : {};
+  }
+
+  function setTeacherSession(credentials) {
+    teacherCredentials = credentials;
+    if (credentials) {
+      sessionStorage.setItem("teacherCredentials", credentials);
+    } else {
+      sessionStorage.removeItem("teacherCredentials");
+    }
+
+    const isLoggedIn = Boolean(credentials);
+    accountLabel.textContent = isLoggedIn ? "Teacher mode" : "Teacher login";
+    accountStatus.textContent = isLoggedIn
+      ? "You can register and unregister students."
+      : "Log in to manage students.";
+    signupContainer.classList.toggle("hidden", !isLoggedIn);
+    loginButton.classList.toggle("hidden", isLoggedIn);
+    logoutButton.classList.toggle("hidden", !isLoggedIn);
+    fetchActivities();
+  }
 
   // Function to fetch activities from API
   async function fetchActivities() {
@@ -12,6 +49,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
       // Clear loading message
       activitiesList.innerHTML = "";
+      activitySelect.innerHTML =
+        '<option value="">-- Select an activity --</option>';
 
       // Populate activities list
       Object.entries(activities).forEach(([name, details]) => {
@@ -28,10 +67,12 @@ document.addEventListener("DOMContentLoaded", () => {
               <h5>Participants:</h5>
               <ul class="participants-list">
                 ${details.participants
-                  .map(
-                    (email) =>
-                      `<li><span class="participant-email">${email}</span><button class="delete-btn" data-activity="${name}" data-email="${email}">❌</button></li>`
-                  )
+                  .map((email) => {
+                    const removeButton = teacherCredentials
+                      ? `<button class="delete-btn" data-activity="${name}" data-email="${email}" aria-label="Unregister ${email} from ${name}">❌</button>`
+                      : "";
+                    return `<li><span class="participant-email">${email}</span>${removeButton}</li>`;
+                  })
                   .join("")}
               </ul>
             </div>`
@@ -80,6 +121,7 @@ document.addEventListener("DOMContentLoaded", () => {
         )}/unregister?email=${encodeURIComponent(email)}`,
         {
           method: "DELETE",
+          headers: authHeaders(),
         }
       );
 
@@ -124,6 +166,7 @@ document.addEventListener("DOMContentLoaded", () => {
         )}/signup?email=${encodeURIComponent(email)}`,
         {
           method: "POST",
+          headers: authHeaders(),
         }
       );
 
@@ -155,6 +198,56 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
+  accountButton.addEventListener("click", () => {
+    const isOpen = !accountDropdown.classList.toggle("hidden");
+    accountButton.setAttribute("aria-expanded", String(isOpen));
+  });
+
+  loginButton.addEventListener("click", () => {
+    accountDropdown.classList.add("hidden");
+    accountButton.setAttribute("aria-expanded", "false");
+    loginMessage.classList.add("hidden");
+    loginDialog.showModal();
+  });
+
+  cancelLoginButton.addEventListener("click", () => loginDialog.close());
+
+  logoutButton.addEventListener("click", () => {
+    setTeacherSession(null);
+    accountDropdown.classList.add("hidden");
+    accountButton.setAttribute("aria-expanded", "false");
+  });
+
+  loginForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const username = document.getElementById("username").value;
+    const password = document.getElementById("password").value;
+    const credentials = btoa(`${username}:${password}`);
+
+    try {
+      const response = await fetch("/admin/session", {
+        headers: { Authorization: `Basic ${credentials}` },
+      });
+      if (!response.ok) {
+        throw new Error("Invalid username or password");
+      }
+
+      setTeacherSession(credentials);
+      loginForm.reset();
+      loginDialog.close();
+    } catch (error) {
+      loginMessage.textContent = error.message;
+      loginMessage.classList.remove("hidden");
+      console.error("Error logging in:", error);
+    }
+  });
+
   // Initialize app
-  fetchActivities();
+  if (teacherCredentials) {
+    fetch("/admin/session", { headers: authHeaders() }).then((response) => {
+      setTeacherSession(response.ok ? teacherCredentials : null);
+    });
+  } else {
+    setTeacherSession(null);
+  }
 });
