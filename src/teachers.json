@@ -1,0 +1,10 @@
+{
+  "teachers": [
+    {
+      "username": "teacher",
+      "salt": "4f7b4e4c3c58bb3e0637bc3c61f62cc1",
+      "iterations": 120000,
+      "password_hash": "1c0b328906f77de2f40f2f9f7d1ef6d6e1a74b58d359fc9506ddeb0320532852"
+    }
+  ]
+}

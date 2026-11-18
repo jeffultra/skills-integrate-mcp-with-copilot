@@ -5,7 +5,8 @@ A super simple FastAPI application that allows students to view and sign up for 
 ## Features
 
 - View all available extracurricular activities
-- Sign up for activities
+- Teacher login for protected student registration and removal
+- Prevent activities from exceeding their participant limit
 
 ## Getting Started
 
@@ -25,12 +26,18 @@ A super simple FastAPI application that allows students to view and sign up for 
    - API documentation: http://localhost:8000/docs
    - Alternative documentation: http://localhost:8000/redoc
 
+The included development teacher account is `teacher` with password
+`Mergington2026!`. Teacher credentials use salted PBKDF2 password hashes in
+`teachers.json`; plaintext passwords are not stored.
+
 ## API Endpoints
 
 | Method | Endpoint                                                          | Description                                                         |
 | ------ | ----------------------------------------------------------------- | ------------------------------------------------------------------- |
 | GET    | `/activities`                                                     | Get all activities with their details and current participant count |
-| POST   | `/activities/{activity_name}/signup?email=student@mergington.edu` | Sign up for an activity                                             |
+| GET    | `/admin/session`                                                  | Validate teacher credentials                                        |
+| POST   | `/activities/{activity_name}/signup?email=student@mergington.edu` | Sign up a student (teacher authentication required)                 |
+| DELETE | `/activities/{activity_name}/unregister?email=student@mergington.edu` | Remove a student (teacher authentication required)               |
 
 ## Data Model
 

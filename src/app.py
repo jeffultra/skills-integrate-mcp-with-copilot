@@ -5,7 +5,12 @@ A super simple FastAPI application that allows students to view and sign up
 for extracurricular activities at Mergington High School.
 """
 
-from fastapi import FastAPI, HTTPException
+import hashlib
+import json
+import hmac
+
+from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
 import os
@@ -77,6 +82,40 @@ activities = {
     }
 }
 
+security = HTTPBasic(auto_error=False)
+
+
+def get_teacher(credentials: HTTPBasicCredentials | None = Depends(security)):
+    """Authenticate a teacher against the configured password hashes."""
+    unauthorized = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Teacher login required",
+        headers={"WWW-Authenticate": "Basic"},
+    )
+    if credentials is None:
+        raise unauthorized
+
+    with open(current_dir / "teachers.json", encoding="utf-8") as teacher_file:
+        teachers = json.load(teacher_file)["teachers"]
+
+    teacher = next(
+        (item for item in teachers if item["username"] == credentials.username),
+        None,
+    )
+    if teacher is None:
+        raise unauthorized
+
+    password_hash = hashlib.pbkdf2_hmac(
+        "sha256",
+        credentials.password.encode("utf-8"),
+        bytes.fromhex(teacher["salt"]),
+        teacher["iterations"],
+    ).hex()
+    if not hmac.compare_digest(password_hash, teacher["password_hash"]):
+        raise unauthorized
+
+    return teacher["username"]
+
 
 @app.get("/")
 def root():
@@ -88,9 +127,20 @@ def get_activities():
     return activities
 
 
+@app.get("/admin/session", dependencies=[Depends(get_teacher)], status_code=204)
+def check_admin_session():
+    """Validate stored teacher credentials."""
+
+
 @app.post("/activities/{activity_name}/signup")
-def signup_for_activity(activity_name: str, email: str):
+def signup_for_activity(
+    activity_name: str,
+    email: str,
+    teacher: str = Depends(get_teacher),
+):
     """Sign up a student for an activity"""
+    del teacher
+
     # Validate activity exists
     if activity_name not in activities:
         raise HTTPException(status_code=404, detail="Activity not found")
@@ -105,14 +155,26 @@ def signup_for_activity(activity_name: str, email: str):
             detail="Student is already signed up"
         )
 
+    if len(activity["participants"]) >= activity["max_participants"]:
+        raise HTTPException(
+            status_code=400,
+            detail="Activity is full"
+        )
+
     # Add student
     activity["participants"].append(email)
     return {"message": f"Signed up {email} for {activity_name}"}
 
 
 @app.delete("/activities/{activity_name}/unregister")
-def unregister_from_activity(activity_name: str, email: str):
+def unregister_from_activity(
+    activity_name: str,
+    email: str,
+    teacher: str = Depends(get_teacher),
+):
     """Unregister a student from an activity"""
+    del teacher
+
     # Validate activity exists
     if activity_name not in activities:
         raise HTTPException(status_code=404, detail="Activity not found")
